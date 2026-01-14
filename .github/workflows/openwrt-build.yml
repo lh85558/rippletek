@@ -51,6 +51,11 @@ jobs:
         echo "CONFIG_PACKAGE_p910nd=y" >> .config
         echo "CONFIG_PACKAGE_luci-app-cups=y" >> .config
         echo "CONFIG_PACKAGE_luci-i18n-cups-zh-cn=y" >> .config
+        echo "CONFIG_PACKAGE_samba4-server=y" >> .config
+        echo "CONFIG_PACKAGE_samba4-client=y" >> .config
+        echo "CONFIG_PACKAGE_samba4-libs=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-samba4=y" >> .config
+        echo "CONFIG_PACKAGE_luci-i18n-samba4-zh-cn=y" >> .config
         echo "CONFIG_PACKAGE_luci=y" >> .config
         echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
         echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
@@ -173,6 +178,28 @@ jobs:
         # Reboot every day at 3 AM
         0 3 * * * /sbin/reboot
         EOF
+
+    - name: Configure Samba for file sharing
+      run: |
+        cd openwrt
+        mkdir -p files/etc/config
+        cat > files/etc/config/samba4 << 'EOF'
+        config samba
+        	option workgroup 'WORKGROUP'
+        	option description 'THDN Print Server'
+        	option netbiosname 'THDN-PrintServer'
+        	option security 'user'
+        	option maptoguest 'Bad User'
+
+        config sambashare
+        	option name 'Shared'
+        	option path '/mnt/shared'
+        	option read_only 'no'
+        	option guest_ok 'yes'
+        	option create_mask '0777'
+        	option dir_mask '0777'
+        EOF
+        mkdir -p files/mnt/shared
 
     - name: Build firmware
       run: |
