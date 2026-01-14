@@ -167,7 +167,6 @@ jobs:
       run: |
         cd openwrt
         mkdir -p files/etc
-        # Generate password hash for 'thdn12345678'
         echo 'admin:$1$thdn12345678$e7Q9z4Y8W2X3V1U0S9T8R7E6D5C4B3A2:' > files/etc/httpasswd
 
     - name: Configure scheduled reboot
@@ -221,4 +220,4 @@ jobs:
         files: openwrt/bin/targets/ath79/generic/*
         tag_name: build-${{ github.sha }}
         name: OpenWrt Build ${{ github.sha }}
-        body: Automated build for RippleTek WA111N with CUPS support
+        body: Automated build for RippleTek WA111N with CUPS support, file sharing, and scheduled reboot
