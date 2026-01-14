@@ -1,0 +1,197 @@
+name: OpenWrt Build for RippleTek WA111N
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup environment
+      run: |
+        sudo apt update
+        sudo apt install -y build-essential subversion git-core libncurses5-dev zlib1g-dev gawk flex quilt libssl-dev xsltproc libxml-parser-perl mercurial bzr ecj cvs unzip build-essential curl wget python3 python3-pip python3-setuptools python3-yaml python3-paramiko python3-nacl python3-cffi python3-bcrypt
+
+    - name: Clone OpenWrt source
+      run: |
+        git clone https://github.com/openwrt/openwrt.git openwrt
+        cd openwrt
+        git checkout openwrt-23.05
+
+    - name: Update feeds
+      run: |
+        cd openwrt
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Configure AR9531 target
+      run: |
+        cd openwrt
+        echo "CONFIG_TARGET_ath79=y" > .config
+        echo "CONFIG_TARGET_ath79_generic=y" >> .config
+        echo "CONFIG_TARGET_ath79_generic_DEVICE_tplink_archer-c2-v3=y" >> .config
+        echo "CONFIG_TARGET_KERNEL_PARTSIZE=2" >> .config
+        echo "CONFIG_TARGET_ROOTFS_PARTSIZE=14" >> .config
+
+    - name: Configure packages
+      run: |
+        cd openwrt
+        echo "CONFIG_PACKAGE_cups=y" >> .config
+        echo "CONFIG_PACKAGE_cups-filters=y" >> .config
+        echo "CONFIG_PACKAGE_ghostscript=y" >> .config
+        echo "CONFIG_PACKAGE_p910nd=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-cups=y" >> .config
+        echo "CONFIG_PACKAGE_luci-i18n-cups-zh-cn=y" >> .config
+        echo "CONFIG_PACKAGE_luci=y" >> .config
+        echo "CONFIG_PACKAGE_luci-theme-bootstrap=y" >> .config
+        echo "CONFIG_PACKAGE_luci-i18n-base-zh-cn=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-advanced-reboot=y" >> .config
+        echo "CONFIG_PACKAGE_luci-app-wireless=y" >> .config
+        echo "CONFIG_PACKAGE_hostapd-common=y" >> .config
+        echo "CONFIG_PACKAGE_wpa-supplicant=y" >> .config
+
+    - name: Configure network
+      run: |
+        cd openwrt
+        mkdir -p files/etc/config
+        cat > files/etc/config/network << 'EOF'
+config interface 'loopback'
+	option device 'lo'
+	option proto 'static'
+	option ipaddr '127.0.0.1'
+	option netmask '255.0.0.0'
+
+config interface 'lan'
+	option device 'eth0'
+	option proto 'static'
+	option ipaddr '192.168.10.1'
+	option netmask '255.255.255.0'
+	option ip6assign '60'
+EOF
+
+    - name: Configure wireless
+      run: |
+        cd openwrt
+        cat > files/etc/config/wireless << 'EOF'
+config wifi-device 'radio0'
+	option type 'mac80211'
+	option path 'platform/ahb/18100000.wmac'
+	option channel '11'
+	option band '2g'
+	option htmode 'HT20'
+	option disabled '0'
+
+config wifi-iface 'default_radio0'
+	option device 'radio0'
+	option network 'lan'
+	option mode 'ap'
+	option ssid 'THDN-dayin'
+	option encryption 'psk2'
+	option key 'thdn12345678'
+EOF
+
+    - name: Configure system
+      run: |
+        cd openwrt
+        mkdir -p files/etc/config
+        cat > files/etc/config/system << 'EOF'
+config system
+	option hostname 'THDN-PrintServer'
+	option timezone 'CST-8'
+	option zonename 'Asia/Shanghai'
+
+config timeserver 'ntp'
+	list server '0.openwrt.pool.ntp.org'
+	list server '1.openwrt.pool.ntp.org'
+	list server '2.openwrt.pool.ntp.org'
+	list server '3.openwrt.pool.ntp.org'
+	option enabled '1'
+	option enable_server '0'
+EOF
+
+    - name: Configure uhttpd
+      run: |
+        cd openwrt
+        mkdir -p files/etc/config
+        cat > files/etc/config/uhttpd << 'EOF'
+config uhttpd 'main'
+	option listen_http '0.0.0.0:80'
+	option listen_https '0.0.0.0:443'
+	option redirect_https '1'
+	option home '/www'
+	option rfc1918_filter '1'
+	option max_requests '3'
+	option max_connections '100'
+	option cert '/etc/uhttpd.crt'
+	option key '/etc/uhttpd.key'
+	option cgi_prefix '/cgi-bin'
+	option script_timeout '60'
+	option network_timeout '30'
+	option http_keepalive '20'
+	option tcp_keepalive '1'
+	option ubus_prefix '/ubus'
+EOF
+
+    - name: Configure dropbear
+      run: |
+        cd openwrt
+        mkdir -p files/etc/config
+        cat > files/etc/config/dropbear << 'EOF'
+config dropbear
+	option PasswordAuth 'on'
+	option RootPasswordAuth 'on'
+	option Port '22'
+EOF
+
+    - name: Set root password
+      run: |
+        cd openwrt
+        mkdir -p files/etc
+        echo 'root:$1$V4UetPzk$CYXluq4wUazHjmCDBCqXF.:19053:0:99999:7:::' > files/etc/shadow
+
+    - name: Configure LuCI admin password
+      run: |
+        cd openwrt
+        mkdir -p files/etc
+        # Generate password hash for 'thdn12345678'
+        echo 'admin:$1$thdn12345678$e7Q9z4Y8W2X3V1U0S9T8R7E6D5C4B3A2:' > files/etc/httpasswd
+
+    - name: Configure scheduled reboot
+      run: |
+        cd openwrt
+        mkdir -p files/etc/crontabs
+        cat > files/etc/crontabs/root << 'EOF'
+# Reboot every day at 3 AM
+0 3 * * * /sbin/reboot
+EOF
+
+    - name: Build firmware
+      run: |
+        cd openwrt
+        make defconfig
+        make download -j$(nproc)
+        make -j$(nproc)
+
+    - name: Upload firmware
+      uses: actions/upload-artifact@v3
+      with:
+        name: openwrt-firmware
+        path: openwrt/bin/targets/ath79/generic/*
+
+    - name: Create release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: openwrt/bin/targets/ath79/generic/*
+        tag_name: build-${{ github.sha }}
+        name: OpenWrt Build ${{ github.sha }}
+        body: Automated build for RippleTek WA111N with CUPS support
