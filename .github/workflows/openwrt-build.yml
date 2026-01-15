@@ -33,7 +33,7 @@ jobs:
         ./scripts/feeds update -a
         ./scripts/feeds install -a
 
-    - name: Configure AR9531 target
+    - name: Configure AR9531 target with 16M flash
       run: |
         cd openwrt
         echo "CONFIG_TARGET_ath79=y" > .config
@@ -41,6 +41,7 @@ jobs:
         echo "CONFIG_TARGET_ath79_generic_DEVICE_tplink_archer-c2-v3=y" >> .config
         echo "CONFIG_TARGET_KERNEL_PARTSIZE=2" >> .config
         echo "CONFIG_TARGET_ROOTFS_PARTSIZE=14" >> .config
+        echo "CONFIG_TARGET_ROOTFS_SQUASHFS=y" >> .config
 
     - name: Configure packages
       run: |
